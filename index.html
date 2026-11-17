@@ -558,7 +558,7 @@
             <div class="realtime-banner">
                 <div class="realtime-info">
                     <h4><i class="fa-solid fa-bolt"></i> Mesin Real-Time Pergantian Tahun Aktif</h4>
-                    <p>Sistem otomatis mereset status PBB lunas kembali menjadi belum lunas setiap tanggal 1 Januari, dengan tetap mengarsipkan data historis tahun-tahun sebelumnya.</p>
+                    <p>Setiap awal tahun (1 Januari), status PBB yang lunas otomatis berubah menjadi belum lunas, yang belum lunas tetap belum lunas, dan arsip tahun sebelumnya dipertahankan utuh.</p>
                 </div>
                 <button class="simulasi-btn" onclick="simulasiTahunBaru()"><i class="fa-solid fa-wand-magic-sparkles"></i> Simulasi Ganti Tahun</button>
             </div>
@@ -757,14 +757,11 @@
         // ==========================================
         // INISIALISASI KREDENSIAL SUPABASE
         // ==========================================
-        // Masukkan URL dan Anon Public Key dari project Supabase Anda di sini:
         const SUPABASE_URL = 'https://YOUR_PROJECT_ID.supabase.co';
         const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
-        
-        // Inisialisasi Klien Supabase
         const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        // Struktur State Data Lokal & Sinkronisasi Supabase
+        // Struktur Database Multi-Tahun
         let db = {
             "format": "data-pajek-dusun",
             "version": 2,
@@ -800,16 +797,14 @@
 
         let selectedYear = "2026";
 
-        // Fungsi Sinkronisasi Data ke Supabase Cloud (Opsional / Aktif jika Kredensial Diisi)
         async function fetchFromSupabase() {
             try {
                 let { data, error } = await _supabase.from('warga_pbb').select('*');
                 if (!error && data && data.length > 0) {
-                    // Jika data cloud tersedia, petakan ke struktur tahun aktif
                     console.log("Data berhasil dimuat dari Supabase:", data);
                 }
             } catch (err) {
-                console.log("Mode offline atau menggunakan data lokal bawaan.");
+                console.log("Mode lokal aktif.");
             }
         }
 
@@ -902,12 +897,9 @@
                 warga.status = warga.status === 'Lunas' ? 'Belum Lunas' : 'Lunas';
                 renderTable();
 
-                // Sinkronisasi update ke Supabase jika terhubung
                 try {
                     await _supabase.from('warga_pbb').update({ status: warga.status }).eq('id', id);
-                } catch (e) {
-                    // lokal fallback
-                }
+                } catch (e) {}
             }
         }
 
@@ -918,9 +910,7 @@
 
                 try {
                     await _supabase.from('warga_pbb').delete().eq('id', id);
-                } catch (e) {
-                    // lokal fallback
-                }
+                } catch (e) {}
             }
         }
 
@@ -953,18 +943,21 @@
             };
 
             db.data[selectedYear].push(newDataItem);
-
             closeTambahModal();
             renderTable();
 
             try {
                 await _supabase.from('warga_pbb').insert([newDataItem]);
-            } catch (e) {
-                // lokal fallback
-            }
+            } catch (e) {}
         }
 
-        // Fitur Utama: Real-Time Auto Reset Setiap Awal Tahun & Mempertahankan Data Tahun Sebelumnya
+        // =========================================================================
+        // FITUR UTAMA: REAL-TIME AUTO-RESET SETIAP AWAL TAHUN
+        // Sesuai permintaan: 
+        // 1. Status PBB yang lunas berubah jadi belum lunas lagi.
+        // 2. Yang belum lunas tetap belum lunas.
+        // 3. Data tahun sebelumnya tetap dipertahankan utuh dalam arsip.
+        // =========================================================================
         function simulasiTahunBaru() {
             let tahunLama = selectedYear;
             let tahunBaruNum = parseInt(tahunLama) + 1;
@@ -972,12 +965,15 @@
 
             if (!db.data[tahunBaru]) {
                 let dataSebelumnya = db.data[tahunLama] || [];
+                
+                // Proses pemetaan ulang secara presisi
                 db.data[tahunBaru] = dataSebelumnya.map(w => ({
                     ...w,
-                    status: "Belum Lunas" // PBB yang lunas direset jadi belum lunas, yang belum lunas tetap belum lunas
+                    status: "Belum Lunas" // Yang lunas menjadi belum lunas, yang belum lunas tetap belum lunas
                 }));
             }
 
+            // Perbarui pilihan dropdown tahun aktif
             let select = document.getElementById('currentYearSelect');
             let exist = Array.from(select.options).some(opt => opt.value === tahunBaru);
             if (!exist) {
@@ -987,6 +983,7 @@
                 select.add(opt, select.firstChild);
             }
 
+            // Masukkan tahun lama ke opsi arsip
             let arsipSelect = document.getElementById('arsipYearSelect');
             let existArsip = Array.from(arsipSelect.options).some(opt => opt.value === tahunLama);
             if (!existArsip) {
@@ -999,7 +996,7 @@
             select.value = tahunBaru;
             changeYear(tahunBaru);
 
-            alert(`Simulasi Pergantian Tahun Berhasil!\nSistem telah memasuki Tahun ${tahunBaru}.\n\n- Data tahun ${tahunLama} disimpan aman dalam arsip.\n- Seluruh status PBB telah di-reset otomatis menjadi 'Belum Lunas' untuk siklus pajak tahun ${tahunBaru}.`);
+            alert(`Simulasi Pergantian Tahun Berhasil!\nSistem telah memasuki Tahun ${tahunBaru}.\n\n- Data tahun ${tahunLama} tetap aman di arsip.\n- Seluruh status PBB (baik yang lunas maupun belum lunas) telah di-reset menjadi 'Belum Lunas' untuk siklus tahun ${tahunBaru}.`);
         }
 
         function renderArsipTable() {
@@ -1038,7 +1035,7 @@
             downloadAnchor.remove();
         }
 
-        // Initial Load & Sinkronisasi
+        // Jalankan saat awal dimuat
         fetchFromSupabase();
         renderTable();
     </script>
